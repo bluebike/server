@@ -99,4 +99,256 @@ cluster_lookups_matched
 1
 cluster_lookups_avoided_matched
 1
-# make test suite happy by cleaning up our mess
+# Multi-byte handling case
+set global innodb_prefix_index_cluster_optimization = ON;
+SET NAMES utf8mb4;
+CREATE TABLE t1(
+f1 varchar(10) CHARACTER SET UTF8MB4 COLLATE UTF8MB4_BIN,
+INDEX (f1(3)))ENGINE=INNODB;
+INSERT INTO t1 VALUES('a'), ('ccc'), ('až'), ('cčc'), ('ggᵷg'), ('¢¢');
+INSERT INTO t1 VALUES('தமிழ்'), ('🐱'), ('🌑'), ('🌒');
+INSERT INTO t1 VALUES('😊me'), ('eu€'), ('ls¢');
+# Eligible - record length is shorter than prefix
+SELECT f1 FROM t1 WHERE f1 = 'a';
+f1
+a
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+0
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+1
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 like 'c%';
+f1
+ccc
+cčc
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+3
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Eligible - record length shorter than prefix length
+SELECT f1 FROM t1 WHERE f1 = 'až';
+f1
+až
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+0
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+1
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 = 'தமிழ்';
+f1
+தமிழ்
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+1
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 like 'ggᵷ%';
+f1
+ggᵷg
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+1
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 like '😊%';
+f1
+😊me
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+1
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 = 'ls¢';
+f1
+ls¢
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+1
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Eligible - record length shorter than prefix length
+SELECT f1 FROM t1 WHERE f1 like '¢¢%';
+f1
+¢¢
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+1
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+1
+# Eligible - record length shorter than prefix length
+SELECT f1 FROM t1 WHERE f1 like '🐱%';
+f1
+🐱
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+1
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+1
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 like '🌑%';
+f1
+🌑
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+0
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+2
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 like '🌒%';
+f1
+🌒
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+0
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+2
+DROP TABLE t1;
+# Multi-byte with minimum character length > 1 bytes
+CREATE TABLE t1(
+f1 varchar(10) CHARACTER SET UTF16,
+INDEX (f1(3)))ENGINE=INNODB;
+INSERT INTO t1 VALUES('a'), ('ccc'), ('až'), ('cčc'), ('ggᵷg'), ('¢¢');
+INSERT INTO t1 VALUES('தமிழ்'), ('🐱'), ('🌑'), ('🌒');
+INSERT INTO t1 VALUES('😊me'), ('eu€'), ('ls¢');
+# Eligible - record length is shorter than prefix
+SELECT f1 FROM t1 WHERE f1 = 'a';
+f1
+a
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+0
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+1
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 like 'c%';
+f1
+ccc
+cčc
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+3
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Eligible - record length shorter than prefix length
+SELECT f1 FROM t1 WHERE f1 = 'až';
+f1
+až
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+0
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+1
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 = 'தமிழ்';
+f1
+தமிழ்
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+1
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 like 'ggᵷ%';
+f1
+ggᵷg
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+2
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 like '😊%';
+f1
+🐱
+🌑
+🌒
+😊me
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+0
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 = 'ls¢';
+f1
+ls¢
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+1
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Eligible - record length shorter than prefix length
+SELECT f1 FROM t1 WHERE f1 like '¢¢%';
+f1
+¢¢
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+1
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+1
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 like '🐱%';
+f1
+🐱
+🌑
+🌒
+😊me
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+0
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 like '🌑%';
+f1
+🐱
+🌑
+🌒
+😊me
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+0
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+# Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 WHERE f1 like '🌒%';
+f1
+🐱
+🌑
+🌒
+😊me
+select @cluster_lookups as cluster_lookups;
+cluster_lookups
+0
+select @cluster_lookups_avoided as cluster_lookups_avoided;
+cluster_lookups_avoided
+0
+DROP TABLE t1;
+set global innodb_prefix_index_cluster_optimization = OFF;
